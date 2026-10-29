@@ -89,7 +89,7 @@ Yêu cầu định dạng kết quả chuẩn HTML cho Telegram (không dùng ma
 """
     
     response = client.models.generate_content(
-        model='gemini-2.5-flash', # Hoặc model flash phù hợp
+        model='gemini-3.6-flash', # Hoặc model flash phù hợp
         contents=prompt,
     )
     raw_text = response.text
