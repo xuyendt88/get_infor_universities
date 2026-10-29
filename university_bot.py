@@ -10,10 +10,14 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # Danh sách trang tin tức / tuyển sinh mục tiêu (Ví dụ mẫu các trường top đầu)
 TARGET_UNIVERSITIES = [
-    {"name": "MIT Admissions", "url": "https://admissions.mit.edu/blog"},
-    {"name": "Stanford News", "url": "https://news.stanford.edu/"},
-    {"name": "Harvard News", "url": "https://news.harvard.edu/gazette/"},
-    {"name": "Oxford News", "url": "https://www.ox.ac.uk/news"}
+    {"name": "MIT Admissions", "url": "https://admissions.mit.edu/"},
+    {"name": "Stanford Admission", "url": "https://admission.stanford.edu/"},
+    {"name": "Harvard Undergraduate", "url": "https://college.harvard.edu/admissions"},
+    {"name": "Oxford Admissions", "url": "https://www.ox.ac.uk/admissions/undergraduate"},
+    {"name": "Cambridge Admission", "url": "https://www.undergraduate.study.cam.ac.uk/"},
+    {"name": "NUS Admissions", "url": "https://www.nus.edu.sg/oam/"},
+    {"name": "NTU Admissions", "url": "https://www.ntu.edu.sg/admissions"},
+    {"name": "Melbourne Study", "url": "https://study.unimelb.edu.au/"}
 ]
 
 def fetch_university_news():
@@ -69,23 +73,24 @@ def analyze_admissions_with_gemini(articles_list):
         news_text += f"[{idx+1}] {art['source']}: {art['title']} ({art['link']})\n"
 
     prompt = f"""
-Từ danh sách thông tin tuyển sinh/tin tức đại học sau, hãy chọn ra các thông báo quan trọng nhất liên quan đến:
-- Thay đổi điều kiện xét tuyển, học phí.
-- Cơ hội học bổng mới hoặc chính sách hỗ trợ tài chính.
-- Deadline nộp hồ sơ quan trọng.
+Nhiệm vụ của bạn là rà soát các tiêu đề và nội dung bài viết từ trang tuyển sinh của các trường đại học lớn. Hãy tìm và chọn ra các thông tin mới nhất, quan trọng nhất liên quan đến:
+1. Hạn chót nộp hồ sơ (Application Deadlines).
+2. Thay đổi tiêu chí xét tuyển, điểm chuẩn, chứng chỉ yêu cầu (SAT, IELTS, TOEFL...).
+3. Học bổng mới, hỗ trợ tài chính (Financial Aid / Scholarships) cho sinh viên quốc tế.
 
-Danh sách:
+Danh sách nguồn:
 {news_text}
 
-Yêu cầu định dạng kết quả chuẩn HTML cho Telegram (không dùng markdown **):
-
+Nếu có thông tin phù hợp, hãy tổng hợp theo chuẩn HTML sau (không dùng markdown **):
 🎓 <b>BẢN TIN TUYỂN SINH & HỌC BỔNG QUỐC TẾ</b> 🎓
 
 ───────────────
-<b>1. [Tên trường] [Tiêu đề tin gọn gàng]</b>
-- Nội dung chính: [Tóm tắt 1 câu cốt lõi]
-- Lưu ý cho học sinh: [Deadline / Điều kiện cần chú ý]
+<b>[Tên trường] [Tiêu đề tin ngắn gọn]</b>
+- Nội dung: [Tóm tắt chi tiết 1-2 câu]
+- Lưu ý/Deadline: [Mốc thời gian hoặc điều kiện cần nhớ]
 - Link: <a href="link_gốc">Xem chi tiết</a>
+
+Nếu tuyệt đối không có thông tin nào liên quan đến tuyển sinh/học bổng trong danh sách trên, hãy trả về ngắn gọn: "Hiện tại chưa có cập nhật mới về tuyển sinh từ các nguồn đã quét."
 """
     
     response = client.models.generate_content(
