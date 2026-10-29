@@ -22,7 +22,6 @@ def load_sent_links():
     return set()
 
 def save_sent_links(sent_set):
-    # Giữ lại tối đa 200 link gần nhất để file không quá lớn
     links_list = list(sent_set)[-200:]
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(links_list, f, ensure_ascii=False, indent=2)
@@ -75,7 +74,6 @@ TARGET_UNIVERSITIES = [
     {"name": "TU Delft", "url": "https://www.tudelft.nl/en/education/admission-and-application"},
     {"name": "University of Amsterdam", "url": "https://www.uva.nl/en/education/bachelors/bachelors.html"},
     {"name": "TUM", "url": "https://www.tum.de/en/studies/application"},
-    {"name": "University of Sydney", "url": "https://www.sydney.edu.au/"},
     {"name": "Fudan University", "url": "https://iso.fudan.edu.cn/isoenglish/main.htm"},
     {"name": "Shanghai Jiao Tong", "url": "https://en.sjtu.edu.cn/study/admission/"},
     {"name": "Zhejiang University", "url": "http://iczu.zju.edu.cn/english/redir.php?catalog_id=111"}
@@ -106,7 +104,6 @@ def fetch_university_news():
                         elif not link.startswith('http'):
                             continue
                             
-                        # Bỏ qua nếu link này đã gửi trước đó
                         if link in sent_links:
                             continue
                             
@@ -117,13 +114,12 @@ def fetch_university_news():
                             "link": link
                         })
                         count += 1
-                        if count >= 2: # Lấy tối đa 2 bài mới mỗi trường
+                        if count >= 2:
                             break
-        except Exception as e:
-            # Bỏ qua lỗi kết nối riêng lẻ của từng trường để bot không bị dừng giữa chừng
+        except Exception:
             continue
             
-    return all_articles[:15] # Giới hạn tối đa 15 bài mới nhất gửi cho AI
+    return all_articles[:15]
 
 def analyze_admissions_with_gemini(articles_list):
     client = genai.Client(api_key=GEMINI_API_KEY)
@@ -132,25 +128,22 @@ def analyze_admissions_with_gemini(articles_list):
     for idx, art in enumerate(articles_list):
         news_text += f"[{idx+1}] {art['source']}: {art['title']} ({art['link']})\n"
 
+    # --- PROMPT ĐÃ ĐƯỢC NỚI LỎNG LINH HOẠT ---
     prompt = f"""
-Nhiệm vụ của bạn là rà soát các thông báo từ trang tuyển sinh đại học. Hãy chọn lọc các thông tin quan trọng nhất liên quan đến:
-1. Hạn chót nộp hồ sơ (Application Deadlines).
-2. Thay đổi tiêu chí xét tuyển, điểm chuẩn, chứng chỉ (SAT, IELTS...).
-3. Học bổng mới hoặc hỗ trợ tài chính cho sinh viên quốc tế.
+Nhiệm vụ của bạn là xem xét danh sách các tiêu đề bài viết từ trang tuyển sinh/thông tin của các trường đại học lớn. Hãy chọn ra 3 đến 5 tin tức hoặc thông báo mới và hữu ích nhất (có thể là thông tin về chương trình học, sự kiện tuyển sinh, thông báo hồ sơ, học bổng hoặc đời sống sinh viên).
 
 Danh sách:
 {news_text}
 
-Nếu có thông tin phù hợp, hãy tổng hợp theo chuẩn HTML sau (không dùng markdown **):
-🎓 <b>BẢN TIN TUYỂN SINH & HỌC BỔNG QUỐC TẾ</b> 🎓
+Hãy tổng hợp kết quả theo chuẩn HTML sau (không dùng markdown **):
+🎓 <b>BẢN TIN TUYỂN SINH & ĐẠI HỌC QUỐC TẾ</b> 🎓
 
 ───────────────
 <b>[Tên trường] [Tiêu đề tin ngắn gọn]</b>
-- Nội dung: [Tóm tắt chi tiết 1-2 câu]
-- Lưu ý/Deadline: [Mốc thời gian hoặc điều kiện cần nhớ]
+- Nội dung chính: [Tóm tắt chi tiết 1-2 câu]
 - Link: <a href="link_gốc">Xem chi tiết</a>
 
-Nếu tuyệt đối không có thông tin tuyển sinh/học bổng nào đáng chú ý, hãy trả về đúng một dòng: "NO_NEWS"
+Nếu danh sách hoàn toàn trống hoặc không có thông tin nào hợp lý, hãy trả về đúng một dòng: "NO_NEWS"
 """
     
     response = client.models.generate_content(
@@ -183,7 +176,6 @@ if __name__ == "__main__":
                 formatted_msg = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', analysis_result)
                 send_telegram_message(formatted_msg)
                 
-                # Lưu lại các link đã gửi để không bị lặp lại lần sau
                 sent_set = load_sent_links()
                 for art in articles:
                     sent_set.add(art['link'])
