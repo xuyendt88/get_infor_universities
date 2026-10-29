@@ -108,7 +108,6 @@ def fetch_university_news():
                         if school["name"] not in school_articles:
                             school_articles[school["name"]] = []
                         
-                        # Tránh trùng tiêu đề trong cùng 1 trường
                         existing_titles = [art['title'] for art in school_articles[school["name"]]]
                         if title not in existing_titles:
                             school_articles[school["name"]].append({
@@ -116,7 +115,7 @@ def fetch_university_news():
                                 "link": link
                             })
                             count += 1
-                            if count >= 2: # Lấy tối đa 2 bài mới nhất mỗi trường
+                            if count >= 2:
                                 break
         except Exception:
             continue
@@ -131,7 +130,7 @@ def generate_post_for_school(school_name, articles_list):
         articles_text += f"- Tiêu đề: {art['title']}\n  Link gốc: {art['link']}\n"
 
     prompt = f"""
-Bạn là chuyên gia truyền thông du học. Dựa vào các thông tin mới từ trường đại học {school_name} dưới đây, hãy viết một bài đăng Facebook hoàn chỉnh, chuyên nghiệp bằng tiếng Việt để tư vấn du học.
+Dựa vào các thông tin mới từ trường đại học {school_name} dưới đây, hãy viết một bài đăng Facebook hoàn chỉnh, chuyên nghiệp bằng tiếng Việt để tư vấn du học.
 
 Thông tin thô:
 {articles_text}
@@ -139,8 +138,7 @@ Thông tin thô:
 Yêu cầu nội dung:
 1. Viết vắn tắt, chi tiết, làm nổi bật thông tin tuyển sinh, học bổng hoặc sự kiện quan trọng của trường {school_name}.
 2. Văn phong thu hút học sinh và phụ huynh, rõ ràng, mạch lạc.
-3. Đính kèm link chi tiết vào bài viết bằng thẻ HTML <a href="link_gốc">Xem chi tiết bài viết</a>.
-4. Định dạng chuẩn HTML an toàn cho Telegram (dùng các thẻ như <b>, <i>, <a>, tuyệt đối không dùng markdown **).
+3. Định dạng chuẩn HTML an toàn cho Telegram (dùng các thẻ như <b>, <i>, <a>, tuyệt đối không dùng markdown **).
 
 Cấu trúc bài viết:
 🎓 <b>CẬP NHẬT TUYỂN SINH: {school_name.upper()}</b> 🎓
@@ -177,18 +175,15 @@ if __name__ == "__main__":
             total_sent = 0
             
             for school_name, articles in schools_data.items():
-                print( đang xử lý bài viết cho trường: {school_name})
+                print(f"Đang xử lý bài viết cho trường: {school_name}")
                 try:
                     post_content = generate_post_for_school(school_name, articles)
                     formatted_post = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', post_content)
                     
-                    # Ghép thêm footer IEE vào cuối mỗi bài
                     final_message = formatted_post + "\n\n" + IEE_FOOTER
                     
-                    # Gửi từng trường thành 1 tin nhắn riêng biệt lên Telegram
                     send_telegram_message(final_message)
                     
-                    # Đánh dấu các link đã gửi
                     for art in articles:
                         sent_set.add(art['link'])
                     total_sent += 1
