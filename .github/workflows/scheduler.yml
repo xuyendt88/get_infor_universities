@@ -37,3 +37,6 @@ jobs:
         with:
           commit_message: "Auto: Update sent links history"
           file_pattern: "sent_links.json"
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 google-genai telegraph
