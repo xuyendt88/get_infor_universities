@@ -10,13 +10,12 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# --- Khởi tạo Telegraph tự động hoàn toàn ---
+# --- Khởi tạo Telegraph tự động ---
 telegraph = Telegraph()
-# Tự động tạo một tài khoản ẩn danh mới trên Telegraph khi bot chạy lần đầu
 try:
     telegraph.create_account(short_name='IEE_UniBot')
 except Exception:
-    pass # Nếu đã tạo rồi thì bỏ qua
+    pass
 
 HISTORY_FILE = "sent_links.json"
 IEE_FOOTER = """----------------------------------
@@ -128,41 +127,54 @@ def fetch_university_news():
             
     return school_articles
 
-def generate_post_content_for_telegraph(school_name, articles_list):
+def generate_post_content(school_name, articles_list):
     client = genai.Client(api_key=GEMINI_API_KEY)
     
     articles_text = ""
     for art in articles_list:
         articles_text += f"- Tiêu đề: {art['title']}\n  Link gốc: {art['link']}\n"
 
+    # Prompt viết nội dung đầy đủ để hiển thị trực tiếp lên Telegram/Facebook
     prompt = f"""
-Viết một bài đăng blog chi tiết, chuyên nghiệp bằng tiếng Việt cho tư vấn du học, dựa trên các thông tin mới nhất từ trường đại học {school_name} dưới đây.
+Dựa vào các thông tin mới từ trường đại học {school_name} dưới đây, hãy viết một bài đăng Facebook hoàn chỉnh, chi tiết và chuyên nghiệp bằng tiếng Việt để tư vấn du học.
 
-Nội dung thô cần tổng hợp:
+Thông tin thô:
 {articles_text}
 
-Yêu cầu định dạng HTML (chỉ dùng thẻ <p>, <strong>, <a>):
-1. Một tiêu đề bài viết hấp dẫn.
-2. Nội dung chi tiết, phân tích các ý chính, tóm tắt rõ ràng (không dùng dấu **).
-3. Đặt liên kết gốc vào các từ khóa phù hợp bằng thẻ <a href="link_gốc">...</a>.
-4. Kết thúc bài viết bằng câu kêu gọi hành động chuyên nghiệp.
+Yêu cầu nội dung:
+1. Viết vắn tắt, chi tiết, làm nổi bật thông tin tuyển sinh, học bổng hoặc sự kiện quan trọng của trường {school_name}.
+2. Văn phong thu hút học sinh và phụ huynh, rõ ràng, mạch lạc.
+3. Định dạng chuẩn HTML an toàn cho Telegram (dùng các thẻ như <b>, <i>, <a>, tuyệt đối không dùng dấu **).
+
+Cấu trúc bài viết:
+🎓 <b>CẬP NHẬT TUYỂN SINH: {school_name.upper()}</b> 🎓
+
+[Nội dung chi tiết, tóm tắt rõ ràng các ý chính]
 """
 
     response = client.models.generate_content(
         model='gemini-3.6-flash',
         contents=prompt,
     )
-    return re.sub(r'<h1>.*?</h1>', '', response.text.strip(), flags=re.DOTALL)
+    return response.text.strip()
 
-def create_telegraph_page(school_name, content_html):
+def create_telegraph_page(school_name, content_html, articles_list):
+    """Tạo trang Telegraph chứa nội dung chi tiết kèm link gốc"""
     try:
+        # Tạo HTML đầy đủ cho trang Telegraph
+        full_html = content_html.replace('\n', '<br>')
+        full_html += "<br><br><h3>Các liên kết tham khảo chi tiết:</h3><ul>"
+        for art in articles_list:
+            full_html += f"<li><a href='{art['link']}'>{art['title']}</a></li>"
+        full_html += "</ul>"
+
         title = f"Cập nhật Tuyển sinh: {school_name}"
         response = telegraph.create_page(
             title=title,
-            html_content=content_html,
+            html_content=full_html,
             author_name="IEE Admissions Bot"
         )
-        return response['url']
+        return f"https://telegra.ph{response['url']}"
     except Exception as e:
         print(f"Lỗi khi tạo Telegraph page cho {school_name}: {e}")
         return None
@@ -190,29 +202,31 @@ if __name__ == "__main__":
             for school_name, articles in schools_data.items():
                 print(f"Đang xử lý bài viết cho trường: {school_name}")
                 try:
-                    content_html = generate_post_content_for_telegraph(school_name, articles)
-                    telegraph_url = create_telegraph_page(school_name, content_html)
+                    # 1. Sinh nội dung tóm tắt chi tiết để đăng Facebook
+                    post_content = generate_post_content(school_name, articles)
+                    formatted_post = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', post_content)
                     
+                    # 2. Tạo trang Telegraph lưu trữ link gốc
+                    telegraph_url = create_telegraph_page(school_name, formatted_post, articles)
+                    
+                    # 3. Gắn link Telegraph độc lập vào cuối bài
+                    link_section = ""
                     if telegraph_url:
-                        # Thêm domain chính xác của telegraph
-                        full_url = f"https://telegra.ph{telegraph_url}"
-                        final_message = (
-                            f"🎓 <b>CẬP NHẬT TUYỂN SINH & ĐẠI HỌC QUỐC TẾ</b> 🎓\n\n"
-                            f"Đã có thông tin mới nhất từ <b>{school_name.upper()}</b>. Bấm vào link bên dưới để xem chi tiết:\n\n"
-                            f"👉 <a href='{full_url}'>Xem thông tin chi tiết tại đây</a>\n\n"
-                            f"{IEE_FOOTER}"
-                        )
-                        
-                        send_telegram_message(final_message)
-                        
-                        for art in articles:
-                            sent_set.add(art['link'])
-                        total_processed_schools += 1
+                        link_section = f"\n\n🔗 <b>Đọc bài viết đầy đủ & Link gốc:</b>\n👉 <a href='{telegraph_url}'>Xem tại đây</a>"
+
+                    # 4. Ghép toàn bộ nội dung + Link Telegraph + Footer IEE
+                    final_message = formatted_post + link_section + "\n\n" + IEE_FOOTER
+                    
+                    send_telegram_message(final_message)
+                    
+                    for art in articles:
+                        sent_set.add(art['link'])
+                    total_processed_schools += 1
                     
                 except Exception as e:
                     print(f"Lỗi khi xử lý {school_name}: {e}")
             
             save_sent_links(sent_set)
-            print(f"Hoàn tất! Đã tạo {total_processed_schools} trang Telegraph và gửi về Telegram.")
+            print(f"Hoàn tất! Đã đẩy {total_processed_schools} bài viết chi tiết về Telegram.")
         else:
             print("Không có thông tin tuyển sinh mới nào từ các trường.")
