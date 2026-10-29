@@ -2,18 +2,16 @@ name: University Admissions Bot Runner
 
 on:
   schedule:
-    # Lịch chạy tự động theo giờ UTC (Giờ Việt Nam = UTC + 7)
-    # 7:30 sáng VN -> 0:30 UTC
-    - cron: '30 0 * * *'
-    # 15:00 chiều VN -> 8:00 UTC
-    - cron: '0 8 * * *'
-
-  # Cho phép bạn bấm nút chạy thủ công (Run workflow) bất cứ lúc nào trên web GitHub
+    - cron: '30 0 * * *'   # Chạy 7:30 sáng mỗi ngày (Giờ VN)
+    - cron: '0 11 * * *'  # Chạy 18:00 tối mỗi ngày (Giờ VN)
+  
   workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Cho phép workflow ghi/commit file trở lại repo
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,3 +31,9 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python university_bot.py
+
+      - name: Commit updated sent_links.json
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto: Update sent links history"
+          file_pattern: "sent_links.json"
