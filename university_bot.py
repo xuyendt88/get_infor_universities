@@ -1,10 +1,21 @@
 import os
 import json
+import logging
 import requests
 from bs4 import BeautifulSoup
 from google import genai
 import re
+from datetime import datetime, timedelta
 from telegraph import Telegraph
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# --- Cấu hình Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.StreamHandler()]
+)
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -14,29 +25,90 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 telegraph = Telegraph()
 try:
     telegraph.create_account(short_name='IEE_UniBot')
-except Exception:
-    pass
+except Exception as e:
+    logging.warning(f"Không thể khởi tạo tài khoản Telegraph (có thể đã tồn tại): {e}")
 
 HISTORY_FILE = "sent_links.json"
+RETENTION_DAYS = 45  # Giữ lịch sử link trong vòng 45 ngày
+
 IEE_FOOTER = """----------------------------------
 <b>Công ty IEE – Tư vấn du học Toàn quốc</b>
 Địa chỉ: số 27 ngõ 23 Đỗ Quang, Yên Hoà, Hà Nội
 Hotline: 0969.159.131
 Đăng ký tư vấn Miễn phí: <a href="https://forms.gle/MuTGJFbU99rNVbyw6">https://forms.gle/MuTGJFbU99rNVbyw6</a>"""
 
+def send_telegram_error(error_message):
+    """Gửi cảnh báo lỗi trực tiếp về Telegram"""
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": f"⚠️ <b>BOT CẢNH BÁO LỖI</b>\n<pre>{error_message}</pre>",
+        "parse_mode": "HTML"
+    }
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except Exception:
+        pass
+
 def load_sent_links():
+    """Tải lịch sử link và tự động xóa các link cũ hơn RETENTION_DAYS ngày"""
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-        except Exception:
-            return set()
-    return set()
+                data = json.load(f)
+                now = datetime.now()
+                filtered = {}
+                
+                # Tương thích ngược: Nếu file cũ là dạng list
+                if isinstance(data, list):
+                    now_str = now.isoformat()
+                    return {link: now_str for link in data}
+                
+                # Định dạng mới: dict {link: timestamp_str}
+                elif isinstance(data, dict):
+                    for link, ts_str in data.items():
+                        try:
+                            ts = datetime.fromisoformat(ts_str)
+                            if now - ts <= timedelta(days=RETENTION_DAYS):
+                                filtered[link] = ts_str
+                        except Exception:
+                            # Nếu parse thời gian lỗi, bỏ qua link cũ này
+                            continue
+                    return filtered
+        except Exception as e:
+            logging.error(f"Lỗi khi đọc file lịch sử sent_links.json: {e}")
+            return {}
+    return {}
 
-def save_sent_links(sent_set):
-    links_list = list(sent_set)[-400:]
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(links_list, f, ensure_ascii=False, indent=2)
+def save_sent_links(sent_dict):
+    """Lưu lịch sử dưới dạng từ điển kèm thời gian"""
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(sent_dict, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Lỗi khi ghi file lịch sử sent_links.json: {e}")
+
+def create_robust_session():
+    """Tạo requests session với cơ chế Retry tự động và Header chuẩn"""
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=2,
+        status_forcelist=[500, 502, 503, 504],
+        raise_on_status=False
+    )
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount('https://', adapter)
+    session.mount('http://', adapter)
+    
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9,vi;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+    })
+    return session
 
 TARGET_UNIVERSITIES = [
     {"name": "MIT", "url": "https://admissions.mit.edu/"},
@@ -85,15 +157,18 @@ TARGET_UNIVERSITIES = [
 ]
 
 def fetch_university_news():
-    print("Đang quét thông tin tuyển sinh từ các trường đại học...")
-    sent_links = load_sent_links()
+    logging.info("Bắt đầu quét thông tin tuyển sinh từ các trường đại học...")
+    sent_dict = load_sent_links()
+    sent_links_set = set(sent_dict.keys())
     school_articles = {}
     
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    session = create_robust_session()
     
     for school in TARGET_UNIVERSITIES:
+        school_name = school["name"]
+        school_url = school["url"]
         try:
-            response = requests.get(school["url"], headers=headers, timeout=8)
+            response = session.get(school_url, timeout=12)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 count = 0
@@ -103,29 +178,35 @@ def fetch_university_news():
                     
                     if len(title) > 25:
                         if link.startswith('/'):
-                            base_domain = "/".join(school["url"].split("/")[:3])
+                            base_domain = "/".join(school_url.split("/")[:3])
                             link = base_domain + link
                         elif not link.startswith('http'):
                             continue
                             
-                        if link in sent_links:
+                        if link in sent_links_set:
                             continue
                             
-                        if school["name"] not in school_articles:
-                            school_articles[school["name"]] = []
+                        if school_name not in school_articles:
+                            school_articles[school_name] = []
                         
-                        if title not in [art['title'] for art in school_articles[school["name"]]]:
-                            school_articles[school["name"]].append({
+                        if title not in [art['title'] for art in school_articles[school_name]]:
+                            school_articles[school_name].append({
                                 "title": title,
                                 "link": link
                             })
                             count += 1
                             if count >= 2:
                                 break
-        except Exception:
+            else:
+                logging.warning(f"Trường {school_name} phản hồi mã lỗi HTTP: {response.status_code}")
+        except Exception as e:
+            err_msg = f"Lỗi kết nối khi quét trường {school_name} ({school_url}): {str(e)}"
+            logging.error(err_msg)
+            # Không gửi thông báo lỗi nhỏ lẻ từng trường để tránh spam Telegram, 
+            # nhưng log lại đầy đủ trên GitHub Actions.
             continue
             
-    return school_articles
+    return school_articles, sent_dict
 
 def generate_post_content(school_name, articles_list):
     client = genai.Client(api_key=GEMINI_API_KEY)
@@ -134,7 +215,6 @@ def generate_post_content(school_name, articles_list):
     for art in articles_list:
         articles_text += f"- Tiêu đề: {art['title']}\n  Link gốc: {art['link']}\n"
 
-    # Prompt viết nội dung đầy đủ để hiển thị trực tiếp lên Telegram/Facebook
     prompt = f"""
 Dựa vào các thông tin mới từ trường đại học {school_name} dưới đây, hãy viết một bài đăng Facebook hoàn chỉnh, chi tiết và chuyên nghiệp bằng tiếng Việt để tư vấn du học.
 
@@ -153,15 +233,13 @@ Cấu trúc bài viết:
 """
 
     response = client.models.generate_content(
-        model='gemini-3.6-flash',
+        model='gemini-2.5-flash', # Cập nhật model chuẩn nếu cần
         contents=prompt,
     )
     return response.text.strip()
 
 def create_telegraph_page(school_name, content_html, articles_list):
-    """Tạo trang Telegraph chứa nội dung chi tiết kèm link gốc"""
     try:
-        # Tạo HTML đầy đủ cho trang Telegraph
         full_html = content_html.replace('\n', '<br>')
         full_html += "<br><br><h3>Các liên kết tham khảo chi tiết:</h3><ul>"
         for art in articles_list:
@@ -176,7 +254,7 @@ def create_telegraph_page(school_name, content_html, articles_list):
         )
         return f"https://telegra.ph{response['url']}"
     except Exception as e:
-        print(f"Lỗi khi tạo Telegraph page cho {school_name}: {e}")
+        logging.error(f"Lỗi khi tạo Telegraph page cho {school_name}: {e}")
         return None
 
 def send_telegram_message(message):
@@ -192,41 +270,46 @@ def send_telegram_message(message):
 
 if __name__ == "__main__":
     if not TELEGRAM_TOKEN or not GEMINI_API_KEY or not CHAT_ID:
-        print("Lỗi: Thiếu cấu hình Secrets!")
+        critical_err = "Lỗi nghiêm trọng: Thiếu cấu hình Secrets (TELEGRAM_TOKEN, CHAT_ID hoặc GEMINI_API_KEY)!"
+        logging.error(critical_err)
+        send_telegram_error(critical_err)
     else:
-        schools_data = fetch_university_news()
-        if schools_data:
-            sent_set = load_sent_links()
-            total_processed_schools = 0
-            
-            for school_name, articles in schools_data.items():
-                print(f"Đang xử lý bài viết cho trường: {school_name}")
-                try:
-                    # 1. Sinh nội dung tóm tắt chi tiết để đăng Facebook
-                    post_content = generate_post_content(school_name, articles)
-                    formatted_post = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', post_content)
-                    
-                    # 2. Tạo trang Telegraph lưu trữ link gốc
-                    telegraph_url = create_telegraph_page(school_name, formatted_post, articles)
-                    
-                    # 3. Gắn link Telegraph độc lập vào cuối bài
-                    link_section = ""
-                    if telegraph_url:
-                        link_section = f"\n\n🔗 <b>Đọc bài viết đầy đủ & Link gốc:</b>\n👉 <a href='{telegraph_url}'>Xem tại đây</a>"
+        try:
+            schools_data, sent_dict = fetch_university_news()
+            if schools_data:
+                total_processed_schools = 0
+                now_str = datetime.now().isoformat()
+                
+                for school_name, articles in schools_data.items():
+                    logging.info(f"Đang xử lý bài viết cho trường: {school_name}")
+                    try:
+                        post_content = generate_post_content(school_name, articles)
+                        formatted_post = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', post_content)
+                        
+                        telegraph_url = create_telegraph_page(school_name, formatted_post, articles)
+                        
+                        link_section = ""
+                        if telegraph_url:
+                            link_section = f"\n\n🔗 <b>Đọc bài viết đầy đủ & Link gốc:</b>\n👉 <a href='{telegraph_url}'>Xem tại đây</a>"
 
-                    # 4. Ghép toàn bộ nội dung + Link Telegraph + Footer IEE
-                    final_message = formatted_post + link_section + "\n\n" + IEE_FOOTER
-                    
-                    send_telegram_message(final_message)
-                    
-                    for art in articles:
-                        sent_set.add(art['link'])
-                    total_processed_schools += 1
-                    
-                except Exception as e:
-                    print(f"Lỗi khi xử lý {school_name}: {e}")
-            
-            save_sent_links(sent_set)
-            print(f"Hoàn tất! Đã đẩy {total_processed_schools} bài viết chi tiết về Telegram.")
-        else:
-            print("Không có thông tin tuyển sinh mới nào từ các trường.")
+                        final_message = formatted_post + link_section + "\n\n" + IEE_FOOTER
+                        
+                        res = send_telegram_message(final_message)
+                        if not res.get("ok"):
+                            logging.error(f"Telegram API từ chối tin nhắn cho trường {school_name}: {res}")
+                        
+                        for art in articles:
+                            sent_dict[art['link']] = now_str
+                        total_processed_schools += 1
+                        
+                    except Exception as e:
+                        logging.error(f"Lỗi khi xử lý nội dung trường {school_name}: {e}")
+                
+                save_sent_links(sent_dict)
+                logging.info(f"Hoàn tất! Đã đẩy thành công {total_processed_schools} bài viết về Telegram.")
+            else:
+                logging.info("Không có thông tin tuyển sinh mới nào từ các trường.")
+        except Exception as main_ex:
+            err_msg = f"Bot gặp lỗi toàn cục trong quá trình chạy: {str(main_ex)}"
+            logging.error(err_msg)
+            send_telegram_error(err_msg)
