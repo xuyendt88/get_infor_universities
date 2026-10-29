@@ -2,8 +2,8 @@ name: University Admissions Bot Runner
 
 on:
   schedule:
-    - cron: '30 0 * * *'   # Chạy 7:30 sáng mỗi ngày (Giờ VN)
-    - cron: '0 11 * * *'  # Chạy 18:00 tối mỗi ngày (Giờ VN)
+    - cron: '30 0 * * *'
+    - cron: '0 11 * * *'
   
   workflow_dispatch:
 
@@ -11,7 +11,7 @@ jobs:
   run-bot:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Cho phép workflow ghi/commit file trở lại repo
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 google-genai
+          pip install requests beautifulsoup4 google-genai telegraph
 
       - name: Run Bot Script
         env:
@@ -37,6 +37,3 @@ jobs:
         with:
           commit_message: "Auto: Update sent links history"
           file_pattern: "sent_links.json"
-      - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4 google-genai telegraph
