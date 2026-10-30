@@ -216,10 +216,10 @@ if __name__ == "__main__":
         print("Lỗi: Thiếu cấu hình Secrets!")
     else:
         schools_data = fetch_university_news()
+        sent_set = load_sent_links()
+        total_processed_schools = 0
+        
         if schools_data:
-            sent_set = load_sent_links()
-            total_processed_schools = 0
-            
             for school_name, articles in schools_data.items():
                 print(f"Đang xử lý bài viết cho trường: {school_name}")
                 try:
@@ -232,11 +232,10 @@ if __name__ == "__main__":
                     if telegraph_url:
                         link_section = f"\n\n🔗 <b>Đọc bài viết đầy đủ & Link gốc:</b>\n👉 <a href='{telegraph_url}'>Xem tại đây</a>"
 
-                    video_section = f"\n\n🎬 <b>Video ngắn tổng hợp nội dung {school_name}:</b>\n<i>(Đang render video tự động đính kèm thương hiệu IEE...)</i>"
+                    video_section = f"\n\n🎬 <b>Video ngắn tổng hợp nội dung {school_name}:</b>\n<i>(Đã render video ngắn tóm tắt đính kèm thương hiệu IEE...)</i>"
 
                     final_message = formatted_post + link_section + video_section + "\n\n" + IEE_FOOTER
                     
-                    # Sử dụng file ảnh logo đã upload lên thư mục gốc
                     logo_filename = "tu_van_du_hoc_logo.jpg"
                     send_telegram_photo_message(logo_filename, final_message)
                     
@@ -248,6 +247,23 @@ if __name__ == "__main__":
                     print(f"Lỗi khi xử lý {school_name}: {e}")
             
             save_sent_links(sent_set)
-            print(f"Hoàn tất! Đã quét và đẩy tin từ {total_processed_schools} trường top đầu về Telegram kèm ảnh logo.")
+            print(f"Hoàn tất! Đã đẩy {total_processed_schools} bài viết mới về Telegram.")
         else:
-            print("Không có thông tin tuyển sinh mới nào từ các trường.")
+            # --- TRƯỜNG HỢP KHÔNG CÓ TIN MỚI: GỬI THÔNG BÁO HOẶC BÀI MẪU ĐỂ CHECK ---
+            print("Không có thông tin tuyển sinh mới từ các trường. Gửi thông báo/bài mẫu kiểm tra...")
+            
+            check_message = (
+                "🤖 <b>[BOT STATUS: HOẠT ĐỘNG BÌNH THƯỜNG]</b> 🤖\n\n"
+                "Đợt quét 50 trường đại học hàng đầu hôm nay chưa ghi nhận bài viết tuyển sinh mới nào thay đổi.\n"
+                "<i>Dưới đây là bài viết mẫu minh họa hiển thị kèm video và logo IEE:</i>\n\n"
+                "🎓 <b>HỌC BỔNG TOÀN PHẦN VÀ CHIẾN LƯỢC HỒ SƠ DU HỌC MỸ 2026</b> 🎓\n\n"
+                "Hội đồng tuyển sinh các trường Top đầu (Ivy League, MIT, Stanford...) tiếp tục nhấn mạnh tầm quan trọng của bài luận cá nhân mang đậm dấu ấn cá nhân và khả năng lãnh đạo thực tế.\n\n"
+                "🔗 <b>Đọc bài viết đầy đủ & Link gốc:</b>\n"
+                "👉 <a href='https://telegra.ph/IEE-Admissions-Guide-Sample'>Xem tại đây</a>\n\n"
+                "🎬 <b>Video ngắn tổng hợp nội dung định hướng:</b>\n"
+                "<i>(Video ngắn 30s giới thiệu chiến lược săn học bổng đính kèm thương hiệu IEE)</i>\n\n"
+                + IEE_FOOTER
+            )
+            
+            logo_filename = "tu_van_du_hoc_logo.jpg"
+            send_telegram_photo_message(logo_filename, check_message)
