@@ -152,7 +152,7 @@ Thông tin thô:
 {articles_text}
 
 Yêu cầu nội dung:
-1. Đặt tiêu đề bài viết thật nổi bật, đi thẳng vào trọng tâm nội dung chuyên môn (ví dụ về học bổng, chính sách xét tuyển, nghiên cứu khoa học đột phá, hoặc đời sống sinh viên), TUYỂT ĐỐI KHÔNG dùng cụm từ chung chung như "CẬP NHẬT TUYỂN SINH:".
+1. Đặt tiêu đề bài viết thật nổi bật, đi thẳng vào trọng tâm nội dung chuyên môn (ví dụ về học bổng, chính sách xét tuyển, nghiên cứu khoa học đột phá, hoặc đời sống sinh viên), TUYỆT ĐỐI KHÔNG dùng cụm từ chung chung như "CẬP NHẬT TUYỂN SINH:".
 2. Tóm tắt chi tiết, sắc sảo, làm nổi bật giá trị cốt lõi giúp học sinh định hướng hồ sơ du học.
 3. Định dạng chuẩn HTML an toàn cho Telegram (dùng các thẻ như <b>, <i>, <a>, tuyệt đối không dùng dấu **).
 
@@ -162,7 +162,6 @@ Cấu trúc trả về:
 [Nội dung chi tiết tóm tắt các ý chính]
 """
 
-    # Cú pháp chuẩn của google-genai mới nhất
     response = client.models.generate_content(
         model='gemini-3.8-flash',
         contents=prompt
@@ -189,7 +188,7 @@ def create_telegraph_page(school_name, content_html, articles_list):
         return None
 
 def send_telegram_photo_message(photo_path, caption_message):
-    """Gửi ảnh logo/banner từ thư mục gốc kèm nội dung bài viết lên Telegram"""
+    """Gửi ảnh logo từ thư mục gốc kèm nội dung bài viết lên Telegram"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
     
     if os.path.exists(photo_path):
@@ -203,7 +202,6 @@ def send_telegram_photo_message(photo_path, caption_message):
             response = requests.post(url, data=payload, files=files)
             return response.json()
     else:
-        # Fallback gửi tin nhắn văn bản nếu không tìm thấy ảnh
         url_text = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {
             "chat_id": CHAT_ID,
@@ -250,21 +248,4 @@ if __name__ == "__main__":
             save_sent_links(sent_set)
             print(f"Hoàn tất! Đã đẩy {total_processed_schools} bài viết mới về Telegram.")
         else:
-            # --- TRƯỜNG HỢP KHÔNG CÓ TIN MỚI: GỬI THÔNG BÁO HOẶC BÀI MẪU ĐỂ CHECK ---
-            print("Không có thông tin tuyển sinh mới từ các trường. Gửi thông báo/bài mẫu kiểm tra...")
-            
-            check_message = (
-                "🤖 <b>[BOT STATUS: HOẠT ĐỘNG BÌNH THƯỜNG]</b> 🤖\n\n"
-                "Đợt quét 50 trường đại học hàng đầu hôm nay chưa ghi nhận bài viết tuyển sinh mới nào thay đổi.\n"
-                "<i>Dưới đây là bài viết mẫu minh họa hiển thị kèm video và logo IEE:</i>\n\n"
-                "🎓 <b>HỌC BỔNG TOÀN PHẦN VÀ CHIẾN LƯỢC HỒ SƠ DU HỌC MỸ 2026</b> 🎓\n\n"
-                "Hội đồng tuyển sinh các trường Top đầu (Ivy League, MIT, Stanford...) tiếp tục nhấn mạnh tầm quan trọng của bài luận cá nhân mang đậm dấu ấn cá nhân và khả năng lãnh đạo thực tế.\n\n"
-                "🔗 <b>Đọc bài viết đầy đủ & Link gốc:</b>\n"
-                "👉 <a href='https://telegra.ph/IEE-Admissions-Guide-Sample'>Xem tại đây</a>\n\n"
-                "🎬 <b>Video ngắn tổng hợp nội dung định hướng:</b>\n"
-                "<i>(Video ngắn 30s giới thiệu chiến lược săn học bổng đính kèm thương hiệu IEE)</i>\n\n"
-                + IEE_FOOTER
-            )
-            
-            logo_filename = "tu_van_du_hoc_logo.jpg"
-            send_telegram_photo_message(logo_filename, check_message)
+            print("Không có thông tin tuyển sinh mới từ các trường. Bot kết thúc phiên làm việc.")
