@@ -152,7 +152,7 @@ Thông tin thô:
 {articles_text}
 
 Yêu cầu nội dung:
-1. Đặt tiêu đề bài viết thật nổi bật, đi thẳng vào trọng tâm nội dung chuyên môn (ví dụ về học bổng, chính sách xét tuyển, nghiên cứu khoa học đột phá, hoặc đời sống sinh viên), TUYỆT ĐỐI KHÔNG dùng cụm từ chung chung như "CẬP NHẬT TUYỂN SINH:".
+1. Đặt tiêu đề bài viết thật nổi bật, đi thẳng vào trọng tâm nội dung chuyên môn (ví dụ về học bổng, chính sách xét tuyển, nghiên cứu khoa học đột phá, hoặc đời sống sinh viên), TUYỂT ĐỐI KHÔNG dùng cụm từ chung chung như "CẬP NHẬT TUYỂN SINH:".
 2. Tóm tắt chi tiết, sắc sảo, làm nổi bật giá trị cốt lõi giúp học sinh định hướng hồ sơ du học.
 3. Định dạng chuẩn HTML an toàn cho Telegram (dùng các thẻ như <b>, <i>, <a>, tuyệt đối không dùng dấu **).
 
@@ -162,9 +162,10 @@ Cấu trúc trả về:
 [Nội dung chi tiết tóm tắt các ý chính]
 """
 
+    # Cú pháp chuẩn của google-genai mới nhất
     response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=prompt,
+        model='gemini-3.8-flash',
+        contents=prompt
     )
     return response.text.strip()
 
