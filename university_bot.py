@@ -4,28 +4,18 @@ import requests
 from bs4 import BeautifulSoup
 from google import genai
 import re
-from telegraph import Telegraph
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# --- Khởi tạo Telegraph tự động ---
-telegraph = Telegraph()
-try:
-    telegraph.create_account(short_name='IEE_UniBot')
-except Exception:
-    pass
-
 HISTORY_FILE = "sent_links.json"
 
-# Chuẩn hóa nhận diện thương hiệu IEE (Logo chuẩn & Slogan)
 IEE_FOOTER = """----------------------------------
-<b>🏢 CÔNG TY TƯ VẤN DU HỌC IEE</b>
-🎨 <i>Thức tỉnh tiềm năng – Chắp cánh ước mơ du học</i>[cite: 8]
-📍 Địa chỉ: Số 27 ngõ 23 Đỗ Quang, Yên Hoà, Cầu Giấy, Hà Nội
- hotline: 0969.159.131
-🚀 Đăng ký tư vấn 1-1 Miễn phí: <a href="https://forms.gle/MuTGJFbU99rNVbyw6">https://forms.gle/MuTGJFbU99rNVbyw6</a>"""
+Công ty IEE – Tư vấn du học Toàn quốc
+Địa chỉ: số 27 ngõ 23 Đỗ Quang, Yên Hoà, Hà Nội
+Hotline: 0969.159.131
+Đăng ký tư vấn Miễn phí: https://forms.gle/MuTGJFbU99rNVbyw6"""
 
 def load_sent_links():
     if os.path.exists(HISTORY_FILE):
@@ -37,11 +27,10 @@ def load_sent_links():
     return set()
 
 def save_sent_links(sent_set):
-    links_list = list(sent_set)[-500:]
+    links_list = list(sent_set)[-400:]
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(links_list, f, ensure_ascii=False, indent=2)
 
-# Danh sách đầy đủ 50 trường đại học hàng đầu thế giới
 TARGET_UNIVERSITIES = [
     {"name": "MIT", "url": "https://admissions.mit.edu/"},
     {"name": "Stanford", "url": "https://admission.stanford.edu/"},
@@ -85,21 +74,12 @@ TARGET_UNIVERSITIES = [
     {"name": "CUHK", "url": "https://www.cuhk.edu.hk/english/admissions/index.html"},
     {"name": "HKUST", "url": "https://join.ust.hk/"},
     {"name": "TU Delft", "url": "https://www.tudelft.nl/en/education/admission-and-application"},
-    {"name": "TUM", "url": "https://www.tum.de/en/studies/application"},
-    {"name": "ETH Zurich", "url": "https://ethz.ch/en/studies/bachelor/application.html"},
-    {"name": "EPFL", "url": "https://www.epfl.ch/education/bachelor/en/admission-immatriculation/"},
-    {"name": "Duke University", "url": "https://admissions.duke.edu/"},
-    {"name": "Brown University", "url": "https://admission.brown.edu/"},
-    {"name": "Carnegie Mellon", "url": "https://www.admission.cs.cmu.edu/"},
-    {"name": "NYU", "url": "https://www.nyu.edu/admissions/undergraduate-admissions.html"},
-    {"name": "KAUST", "url": "https://admissions.kaust.edu.sa/"}
+    {"name": "TUM", "url": "https://www.tum.de/en/studies/application"}
 ]
 
 def fetch_university_news():
-    print(f"Đang quét thông tin từ {len(TARGET_UNIVERSITIES)} trường đại học hàng đầu...")
     sent_links = load_sent_links()
     school_articles = {}
-    
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
     for school in TARGET_UNIVERSITIES:
@@ -111,20 +91,16 @@ def fetch_university_news():
                 for a_tag in soup.find_all('a', href=True):
                     title = a_tag.get_text().strip()
                     link = a_tag['href']
-                    
                     if len(title) > 25:
                         if link.startswith('/'):
                             base_domain = "/".join(school["url"].split("/")[:3])
                             link = base_domain + link
                         elif not link.startswith('http'):
                             continue
-                            
                         if link in sent_links:
                             continue
-                            
                         if school["name"] not in school_articles:
                             school_articles[school["name"]] = []
-                        
                         if title not in [art['title'] for art in school_articles[school["name"]]]:
                             school_articles[school["name"]].append({
                                 "title": title,
@@ -135,108 +111,70 @@ def fetch_university_news():
                                 break
         except Exception:
             continue
-            
     return school_articles
 
 def generate_post_content(school_name, articles_list):
     client = genai.Client(api_key=GEMINI_API_KEY)
-    
     articles_text = ""
     for art in articles_list:
-        articles_text += f"- Tiêu đề bài viết gốc: {art['title']}\n  Link: {art['link']}\n"
+        articles_text += f"- Tiêu đề: {art['title']}\n  Link gốc: {art['link']}\n"
 
     prompt = f"""
-Dựa vào các thông tin mới từ trường đại học {school_name} dưới đây, hãy viết một bài đăng hoàn chỉnh, chuyên nghiệp bằng tiếng Việt để tư vấn du học.
+Dựa vào các thông tin mới từ trường đại học {school_name} dưới đây, hãy viết một bài đăng Facebook hoàn chỉnh, chi tiết và chuyên nghiệp bằng tiếng Việt để tư vấn du học.
 
 Thông tin thô:
 {articles_text}
 
 Yêu cầu nội dung:
-1. Đặt tiêu đề bài viết thật nổi bật, đi thẳng vào trọng tâm nội dung chuyên môn (ví dụ về học bổng, chính sách xét tuyển, nghiên cứu khoa học đột phá, hoặc đời sống sinh viên), TUYỆT ĐỐI KHÔNG dùng cụm từ chung chung như "CẬP NHẬT TUYỂN SINH:".
-2. Tóm tắt chi tiết, sắc sảo, làm nổi bật giá trị cốt lõi giúp học sinh định hướng hồ sơ du học.
-3. Định dạng chuẩn HTML an toàn cho Telegram (dùng các thẻ như <b>, <i>, <a>, tuyệt đối không dùng dấu **).
+1. Viết vắn tắt, chi tiết, làm nổi bật thông tin tuyển sinh, học bổng hoặc sự kiện quan trọng của trường {school_name}.
+2. Văn phong thu hút học sinh và phụ huynh, rõ ràng, mạch lạc.
+3. KHÔNG sử dụng bất kỳ thẻ HTML hay định dạng markdown (như **, *, <a>) nào trong văn bản thuần túy này.
 
-Cấu trúc trả về:
-🎓 <b>[TIÊU ĐỀ ĐẶC TRƯNG, ĐÁNH TRÚNG TRỌNG TÂM CỦA {school_name.upper()}]</b> 🎓
+Cấu trúc bài viết:
+CẬP NHẬT TUYỂN SINH: {school_name.upper()}
 
-[Nội dung chi tiết tóm tắt các ý chính]
+[Nội dung chi tiết, tóm tắt rõ ràng các ý chính]
 """
 
     response = client.models.generate_content(
-        model='gemini-3.8-flash',
-        contents=prompt
+        model='gemini-3.6-flash',
+        contents=prompt,
     )
     return response.text.strip()
 
-def create_telegraph_page(school_name, content_html, articles_list):
-    try:
-        full_html = content_html.replace('\n', '<br>')
-        full_html += "<br><br><h3>Các liên kết tham khảo chi tiết:</h3><ul>"
-        for art in articles_list:
-            full_html += f"<li><a href='{art['link']}'>{art['title']}</a></li>"
-        full_html += "</ul>"
-
-        title = f"{school_name}: {articles_list[0]['title'] if articles_list else 'Thông tin mới'}"
-        response = telegraph.create_page(
-            title=title,
-            html_content=full_html,
-            author_name="IEE Admissions Bot"
-        )
-        return f"https://telegra.ph{response['url']}"
-    except Exception as e:
-        print(f"Lỗi khi tạo Telegraph page cho {school_name}: {e}")
-        return None
-
-def send_telegram_photo_message(photo_path, caption_message):
-    """Gửi ảnh logo từ thư mục gốc kèm nội dung bài viết lên Telegram"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
-    
-    if os.path.exists(photo_path):
-        with open(photo_path, 'rb') as photo_file:
-            payload = {
-                "chat_id": CHAT_ID,
-                "caption": caption_message,
-                "parse_mode": "HTML"
-            }
-            files = {"photo": photo_file}
-            response = requests.post(url, data=payload, files=files)
-            return response.json()
-    else:
-        url_text = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": CHAT_ID,
-            "text": caption_message,
-            "parse_mode": "HTML"
-        }
-        return requests.post(url_text, json=payload).json()
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": False
+    }
+    response = requests.post(url, json=payload)
+    return response.json()
 
 if __name__ == "__main__":
     if not TELEGRAM_TOKEN or not GEMINI_API_KEY or not CHAT_ID:
         print("Lỗi: Thiếu cấu hình Secrets!")
     else:
         schools_data = fetch_university_news()
-        sent_set = load_sent_links()
-        total_processed_schools = 0
-        
         if schools_data:
+            sent_set = load_sent_links()
+            total_processed_schools = 0
+            
             for school_name, articles in schools_data.items():
                 print(f"Đang xử lý bài viết cho trường: {school_name}")
                 try:
                     post_content = generate_post_content(school_name, articles)
-                    formatted_post = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', post_content)
                     
-                    telegraph_url = create_telegraph_page(school_name, formatted_post, articles)
-                    
-                    link_section = ""
-                    if telegraph_url:
-                        link_section = f"\n\n🔗 <b>Đọc bài viết đầy đủ & Link gốc:</b>\n👉 <a href='{telegraph_url}'>Xem tại đây</a>"
+                    # Đính kèm danh sách link nguồn vào cuối bài để tiện tra cứu
+                    links_section = "\n\nLink gốc tham khảo:\n"
+                    for art in articles:
+                        links_section += f"- {art['link']}\n"
 
-                    video_section = f"\n\n🎬 <b>Video ngắn tổng hợp nội dung {school_name}:</b>\n<i>(Đã render video ngắn tóm tắt đính kèm thương hiệu IEE...)</i>"
-
-                    final_message = formatted_post + link_section + video_section + "\n\n" + IEE_FOOTER
+                    final_message = post_content + links_section + "\n" + IEE_FOOTER
                     
-                    logo_filename = "tu_van_du_hoc_logo.jpg"
-                    send_telegram_photo_message(logo_filename, final_message)
+                    send_telegram_message(final_message)
                     
                     for art in articles:
                         sent_set.add(art['link'])
@@ -246,6 +184,6 @@ if __name__ == "__main__":
                     print(f"Lỗi khi xử lý {school_name}: {e}")
             
             save_sent_links(sent_set)
-            print(f"Hoàn tất! Đã đẩy {total_processed_schools} bài viết mới về Telegram.")
+            print(f"Hoàn tất! Đã đẩy {total_processed_schools} bài viết chi tiết về Telegram.")
         else:
-            print("Không có thông tin tuyển sinh mới từ các trường. Bot kết thúc phiên làm việc.")
+            print("Không có thông tin tuyển sinh mới nào từ các trường.")
