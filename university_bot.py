@@ -119,6 +119,7 @@ def generate_post_content(school_name, articles_list):
     for art in articles_list:
         articles_text += f"- Tiêu đề: {art['title']}\n  Link gốc: {art['link']}\n"
 
+    # Đã cải tiến Prompt để AI tự sinh tiêu đề linh hoạt bám sát nội dung từng trường
     prompt = f"""
 Dựa vào các thông tin mới từ trường đại học {school_name} dưới đây, hãy viết một bài đăng Facebook hoàn chỉnh, chi tiết và chuyên nghiệp bằng tiếng Việt để tư vấn du học.
 
@@ -126,12 +127,13 @@ Thông tin thô:
 {articles_text}
 
 Yêu cầu nội dung:
-1. Viết vắn tắt, chi tiết, làm nổi bật thông tin tuyển sinh, học bổng hoặc sự kiện quan trọng của trường {school_name}.
-2. Văn phong thu hút học sinh và phụ huynh, rõ ràng, mạch lạc.
-3. KHÔNG sử dụng bất kỳ thẻ HTML hay định dạng markdown (như **, *, <a>) nào trong văn bản thuần túy này.
+1. SÁNG TẠO TIÊU ĐỀ: Dòng đầu tiên phải là một tiêu đề thật thu hút, linh hoạt bám sát nội dung chính của bài (ví dụ: liên quan đến học bổng, ngành hot, hoặc sự kiện tuyển sinh cụ thể của trường {school_name}), viết bằng chữ IN HOA, không dùng tiêu đề chung chung.
+2. Viết vắn tắt, chi tiết, làm nổi bật thông tin tuyển sinh, học bổng hoặc sự kiện quan trọng.
+3. Văn phong thu hút học sinh và phụ huynh, rõ ràng, mạch lạc.
+4. KHÔNG sử dụng bất kỳ thẻ HTML hay định dạng markdown (như **, *, <a>) nào trong văn bản thuần túy này.
 
 Cấu trúc bài viết:
-CẬP NHẬT TUYỂN SINH: {school_name.upper()}
+[TIÊU ĐỀ LINH HOẠT VỀ TRƯỜNG {school_name.upper()}]
 
 [Nội dung chi tiết, tóm tắt rõ ràng các ý chính]
 """
@@ -167,12 +169,11 @@ if __name__ == "__main__":
                 try:
                     post_content = generate_post_content(school_name, articles)
                     
-                    # Đính kèm danh sách link nguồn vào cuối bài để tiện tra cứu
-                    links_section = "\n\nLink gốc tham khảo:\n"
-                    for art in articles:
-                        links_section += f"- {art['link']}\n"
+                    # Lấy link gốc đầu tiên làm link preview chính cho bài viết Facebook
+                    primary_link = articles[0]['link'] if articles else TARGET_UNIVERSITIES[0]['url']
+                    link_section = f"\n\nLink chi tiết & Đọc thêm:\n{primary_link}"
 
-                    final_message = post_content + links_section + "\n" + IEE_FOOTER
+                    final_message = post_content + link_section + "\n\n" + IEE_FOOTER
                     
                     send_telegram_message(final_message)
                     
